@@ -1,5 +1,4 @@
 import json
-import pickle
 import numpy as np
 import geojson
 from affine import Affine
@@ -198,7 +197,7 @@ class sGrid:
         xll="lower",
         yll="lower",
         metadata={},
-        **kwargs
+        **kwargs,
     ):
         """
         Reads data from an ascii file and returns a Raster.
@@ -236,7 +235,7 @@ class sGrid:
             xll=xll,
             yll=yll,
             metadata=metadata,
-            **kwargs
+            **kwargs,
         )
 
     def read_raster(
@@ -247,7 +246,7 @@ class sGrid:
         window_crs=None,
         metadata={},
         mask_geometry=False,
-        **kwargs
+        **kwargs,
     ):
         """
         Reads data from a raster file and returns a Raster object.
@@ -286,7 +285,7 @@ class sGrid:
             window_crs=window_crs,
             metadata=metadata,
             mask_geometry=mask_geometry,
-            **kwargs
+            **kwargs,
         )
 
     def to_ascii(
@@ -306,7 +305,7 @@ class sGrid:
         mask=None,
         nodata=None,
         dtype=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Writes a Raster object to a formatted ascii text file.
@@ -366,7 +365,7 @@ class sGrid:
             mask=mask,
             nodata=nodata,
             dtype=dtype,
-            **kwargs
+            **kwargs,
         )
 
     def to_raster(
@@ -387,7 +386,7 @@ class sGrid:
         mask=None,
         nodata=None,
         dtype=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Writes gridded data to a raster.
@@ -448,7 +447,7 @@ class sGrid:
             mask=mask,
             nodata=nodata,
             dtype=dtype,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -519,7 +518,7 @@ class sGrid:
         dtype=None,
         inherit_metadata=True,
         new_metadata={},
-        **kwargs
+        **kwargs,
     ):
         """
         Return a copy of a gridded dataset transformed to a new spatial reference system. The
@@ -662,7 +661,7 @@ class sGrid:
         pits=-2,
         nodata_out=None,
         dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
-        **kwargs
+        **kwargs,
     ):
         """
         Generates a flow direction raster from a DEM grid. Both d8 and d-infinity routing
@@ -827,7 +826,7 @@ class sGrid:
         routing="d8",
         snap="corner",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         """
         Delineates a watershed from a given pour point (x, y).
@@ -1066,7 +1065,7 @@ class sGrid:
         routing="d8",
         cycle_size=1,
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         """
         Generates a flow accumulation raster. If no weights are provided, the value of each cell
@@ -1167,7 +1166,7 @@ class sGrid:
         nodata_out=0.0,
         efficiency=None,
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -1234,7 +1233,7 @@ class sGrid:
         efficiency=None,
         cycle_size=1,
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -1318,7 +1317,7 @@ class sGrid:
         nodata_out=0.0,
         efficiency=None,
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -1385,7 +1384,7 @@ class sGrid:
         xytype="coordinate",
         snap="corner",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         """
         Generates a raster representing the (weighted) topological distance from each cell
@@ -1520,7 +1519,7 @@ class sGrid:
         xytype="coordinate",
         snap="corner",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -1559,7 +1558,7 @@ class sGrid:
         xytype="coordinate",
         snap="corner",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -1610,7 +1609,7 @@ class sGrid:
         xytype="coordinate",
         snap="corner",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         # Pad the rim
         left, right, top, bottom = self._pop_rim(fdir, nodata=0)
@@ -1652,7 +1651,7 @@ class sGrid:
         routing="d8",
         return_index=False,
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         """
         Computes the height above nearest drainage (HAND), based on a flow direction grid,
@@ -1866,7 +1865,7 @@ class sGrid:
         snap="center",
         split_points=None,
         dem_path=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Generates river segments from flow direction and mask.
@@ -1899,8 +1898,10 @@ class sGrid:
         """
 
         profiles, connections = self.extract_profiles(
-            fdir, mask, dirmap=dirmap, split_points=split_points)
+            fdir, mask, dirmap=dirmap, split_points=split_points
+        )
 
+        dem = None
         if dem_path is not None:
             dem = self.read_raster(dem_path)
             dem = self._input_handler(dem, **kwargs)
@@ -1918,15 +1919,20 @@ class sGrid:
             props = {
                 "netnumber": index,
                 "goto": connections[index],
-                "length": round(line_string.length, 1)
+                "length": round(line_string.length, 1),
             }
-            if dem_path is not None:
-                props['elev_i'] = round(dem[yi[0], xi[0]], 1)
-                props['elev_f'] = round(dem[yi[-1], xi[-1]], 1)
+            if dem is not None:
+                props["elev_i"] = round(float(dem[yi[0], xi[0]]), 1)
+                props["elev_f"] = round(float(dem[yi[-1], xi[-1]]), 1)
 
-            featurelist.append(geojson.Feature(geometry=line, id=index, properties=props))
+            featurelist.append(
+                geojson.Feature(geometry=line, id=index, properties=props)
+            )
         geo = geojson.FeatureCollection(featurelist)
-        geo['crs'] = {"type": "name", "properties": {"name": f"EPSG:{fdir.crs.to_epsg()}"}}
+        geo["crs"] = {
+            "type": "name",
+            "properties": {"name": f"EPSG:{fdir.crs.to_epsg()}"},
+        }
         return geo
 
     def extract_profiles(
@@ -1937,8 +1943,8 @@ class sGrid:
         include_endpoint=True,
         routing="d8",
         split_points=None,
-        snap='center',
-        **kwargs
+        snap="center",
+        **kwargs,
     ):
         """
         Extracts river segments and connectivity of river segments from flow direction and mask.
@@ -2025,10 +2031,11 @@ class sGrid:
                 mapped_profiles[netnumber] = prof
                 netnumber += 1
 
-        indices = {profile[0]: netnumber for netnumber, profile in mapped_profiles.items()}
+        indices = {
+            profile[0]: netnumber for netnumber, profile in mapped_profiles.items()
+        }
         connections = {
-            indices[key]: indices.get(value, 0)
-            for key, value in connections_id.items()
+            indices[key]: indices.get(value, 0) for key, value in connections_id.items()
         }
         return mapped_profiles, connections
 
@@ -2040,7 +2047,7 @@ class sGrid:
         nodata_out=0,
         routing="d8",
         algorithm="iterative",
-        **kwargs
+        **kwargs,
     ):
         """
         Computes the Strahler stream order.
@@ -2128,7 +2135,7 @@ class sGrid:
         routing="d8",
         algorithm="iterative",
         cycle_size=1,
-        **kwargs
+        **kwargs,
     ):
         """
         Generates a raster representing the (weighted) topological distance from each cell
@@ -2215,7 +2222,7 @@ class sGrid:
         dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
         algorithm="iterative",
         nodata_out=np.nan,
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -2257,7 +2264,7 @@ class sGrid:
         algorithm="iterative",
         nodata_out=np.nan,
         cycle_size=1,
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -2307,7 +2314,7 @@ class sGrid:
         algorithm="iterative",
         nodata_out=np.nan,
         cycle_size=1,
-        **kwargs
+        **kwargs,
     ):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
@@ -2350,7 +2357,7 @@ class sGrid:
         dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
         nodata_out=np.nan,
         routing="d8",
-        **kwargs
+        **kwargs,
     ):
         """
         Generates an array representing the elevation difference from each cell to its
@@ -2483,7 +2490,7 @@ class sGrid:
         dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
         nodata_out=np.nan,
         routing="d8",
-        **kwargs
+        **kwargs,
     ):
         """
         Generates an array representing the distance from each cell to its downstream neighbor(s).
@@ -2612,7 +2619,7 @@ class sGrid:
         dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
         nodata_out=np.nan,
         routing="d8",
-        **kwargs
+        **kwargs,
     ):
         """
         Generates an array representing the slope between each cell and
@@ -3174,7 +3181,7 @@ class sGrid:
                         parent,
                         selected_ids,
                         network,
-                        end_point_id=end_point_id
+                        end_point_id=end_point_id,
                         # split_points=split_points_ids,
                     )
         return selected_ids
@@ -3184,7 +3191,7 @@ class sGrid:
         if network[r, c]:
             print("Split point on network")
             return c, r
-        elif network[r - 1: r + 2, c - 1: c + 2].any():
+        elif network[r - 1 : r + 2, c - 1 : c + 2].any():
             c_ex, r_ex = View.affine_transform(~fdir.affine, x, y)
             print("Found network near split point!")
             nearest = None
@@ -3216,7 +3223,7 @@ class sGrid:
         nodata_out=0.0,
         routing="d8",
         snap="center",
-        **kwargs
+        **kwargs,
     ):
         """
         Sub-catchment delineation using fdir and network.
@@ -3254,7 +3261,9 @@ class sGrid:
         fdir = self._input_handler(fdir, **kwargs)
 
         cell_topology = self.compute_cell_topology(fdir, dirmap)
-        profiles, connections = self.extract_profiles(fdir, network, split_points=split_points)
+        profiles, connections = self.extract_profiles(
+            fdir, network, split_points=split_points
+        )
 
         sub_basins = np.empty(fdir.shape)
         sub_basins[:] = np.nan
@@ -3263,11 +3272,7 @@ class sGrid:
         for netnumber, prof in profiles.items():
             start_id, end_id = prof[-2], prof[0]
             sel = self.sub_catchment(
-                cell_topology,
-                start_id,
-                [],
-                network,
-                end_point_id=end_id
+                cell_topology, start_id, [], network, end_point_id=end_id
             )
             # print(f'{netnum=} cell_count: {len(sel)}')
             visited = visited + sel
@@ -3282,50 +3287,50 @@ class sGrid:
         return sb
 
     def to_sb_shapefile(self, sub_basins, filepath, dem_path=None):
-        shapes = self.polygonize(sub_basins, sub_basins > 0 , connectivity=8)
+        shapes = self.polygonize(sub_basins, sub_basins > 0, connectivity=8)
         shapes_list = list(shapes)
 
         # Specify schema
         schema = {
-            'geometry': 'Polygon',
-            'properties': {
-                'netnumber': 'int',
-                'area': 'float',
-                'centroid_X': 'float',
-                'centroid_Y': 'float'
-            }
+            "geometry": "Polygon",
+            "properties": {
+                "netnumber": "int",
+                "area": "float",
+                "centroid_X": "float",
+                "centroid_Y": "float",
+            },
         }
 
         stats = None
         if dem_path is not None:
             from rasterstats import zonal_stats
+
             geom_list = [geom for geom, _ in shapes_list]
             stats = zonal_stats(geom_list, dem_path, stats=["mean"], nodata=-9999)
-            schema['properties']['avgelev'] = 'float'
+            schema["properties"]["avgelev"] = "float"
 
-        with fiona.open(filepath, 'w',
-                        driver='ESRI Shapefile',
-                        crs=self.crs.srs,
-                        schema=schema) as c:
+        with fiona.open(
+            filepath, "w", driver="ESRI Shapefile", crs=self.crs.srs, schema=schema
+        ) as c:
 
             for i, (geom, value) in enumerate(shapes_list):
                 polygon = shape(geom)
 
                 rec = {
-                    'geometry': geom,
-                    'properties': {
-                        'netnumber': value,
-                        'area': round(polygon.area, 1),
-                        'centroid_X': round(polygon.centroid.x, 1),
-                        'centroid_Y': round(polygon.centroid.y, 1)
+                    "geometry": geom,
+                    "properties": {
+                        "netnumber": value,
+                        "area": round(polygon.area, 1),
+                        "centroid_X": round(polygon.centroid.x, 1),
+                        "centroid_Y": round(polygon.centroid.y, 1),
                     },
-                    'id': i
+                    "id": i,
                 }
                 if stats is not None:
-                    rec['properties']['avgelev'] = round(stats[i]['mean'], 1)
+                    rec["properties"]["avgelev"] = round(stats[i]["mean"], 1)
 
                 c.write(rec)
 
     def to_vector(self, features_collection, file_path):
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             json.dump(features_collection, f)
