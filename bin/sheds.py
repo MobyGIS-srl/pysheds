@@ -16,6 +16,11 @@ def lazy_import():
     from pysheds.sgrid import sGrid
 
 
+def check_raster(file_path):
+    if file_path.endswith('asc'):
+        raise NotImplementedError('Only GeoTtiff raster supported by CLI at the moment.')
+
+
 @app.command()
 def fill_depressions(
     dem_path: str = typer.Argument(..., help="Path to the input DEM"),
@@ -27,6 +32,7 @@ def fill_depressions(
 
     start = time.time()
     lazy_import()
+    check_raster(dem_path)
 
     grid: sGrid = sGrid.from_raster(dem_path)
     dem = grid.read_raster(dem_path)
@@ -62,6 +68,7 @@ def flow_directions(
 
     start = time.time()
     lazy_import()
+    check_raster(dem_path)
 
     grid: sGrid = sGrid.from_raster(dem_path)
     inflated_dem = grid.read_raster(dem_path)
@@ -96,6 +103,7 @@ def contributing_area(
     """
     start = time.time()
     lazy_import()
+    check_raster(fdir_path)
 
     grid: sGrid = sGrid.from_raster(fdir_path)
     fdir = grid.read_raster(fdir_path)
@@ -122,6 +130,7 @@ def extract_network(
     """
     start = time.time()
     lazy_import()
+    check_raster(acc_path)
 
     grid: sGrid = sGrid.from_raster(acc_path)
     acc = grid.read_raster(acc_path)
@@ -152,6 +161,8 @@ def extract_catchment(
     """
     start = time.time()
     lazy_import()
+    check_raster(fdir_path)
+
     # Load the flow direction raster
     grid: sGrid = sGrid.from_raster(fdir_path)
     fdir = grid.read_raster(fdir_path)
@@ -171,7 +182,7 @@ def parse_split_points(split_points):
     split_points_list = None
     if split_points:
         split_points_list = [
-            tuple(map(int, point.split(","))) for point in split_points.split(";")
+            tuple(map(float, point.split(","))) for point in split_points.split(";")
         ]
     return split_points_list
 
@@ -200,6 +211,7 @@ def extract_subcatchment(
     """
     start = time.time()
     lazy_import()
+    check_raster(fdir_path)
 
     # Load the raster grid
     grid: sGrid = sGrid.from_raster(fdir_path)
@@ -248,6 +260,8 @@ def get_topology(
     """
     start = time.time()
     lazy_import()
+    check_raster(fdir_path)
+    check_raster(acc_path)
 
     grid: sGrid = sGrid.from_raster(acc_path)
     fdir = grid.read_raster(fdir_path)
@@ -294,6 +308,8 @@ def network_vectorize(
     """
     start = time.time()
     lazy_import()
+    check_raster(fdir_path)
+    check_raster(acc_path)
 
     grid: sGrid = sGrid.from_raster(acc_path)
     fdir = grid.read_raster(fdir_path)
@@ -315,7 +331,7 @@ def network_vectorize(
 @app.command()
 def subcatchment_vectorize(
     subcatchments_path: str = typer.Argument(
-        ..., help="Path to the input flow direction raster."
+        ..., help="Path to the input flow sub-catchment raster."
     ),
     output_path: str = typer.Argument(
         ..., help="Path to shapefile where to save vector of sub-basins"
@@ -330,6 +346,7 @@ def subcatchment_vectorize(
     """
     start = time.time()
     lazy_import()
+    check_raster(subcatchments_path)
 
     grid: sGrid = sGrid.from_raster(subcatchments_path)
     sub_basins = grid.read_raster(subcatchments_path)
@@ -348,6 +365,8 @@ def clip_mask(
 ):
     start = time.time()
     lazy_import()
+    check_raster(mask_path)
+    check_raster(target_path)
 
     grid: sGrid = sGrid.from_raster(mask_path)
     mask = grid.read_raster(mask_path)
