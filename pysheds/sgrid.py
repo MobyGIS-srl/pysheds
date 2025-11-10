@@ -1,4 +1,6 @@
 import json
+from collections import defaultdict, ChainMap
+
 import numpy as np
 import geojson
 from affine import Affine
@@ -1832,7 +1834,7 @@ class sGrid:
         )
         return hand
 
-    def get_cell_topology(self, fdir, dirmap, mask):
+    def _prepare_topology_inputs(self, fdir, dirmap, mask):
         # Find nodata cells and invalid cells
         nodata_cells = self._get_nodata_cells(fdir)
         invalid_cells = ~np.in1d(fdir.ravel(), dirmap).reshape(fdir.shape)
@@ -1844,18 +1846,8 @@ class sGrid:
         startnodes = np.arange(fdir.size, dtype=np.int64)
         endnodes = _self._flatten_fdir_numba(masked_fdir, dirmap).reshape(fdir.shape)
         indegree = np.bincount(endnodes.ravel(), minlength=fdir.size).astype(np.uint8)
-        return startnodes, endnodes, indegree
-
-    def dict_cell_topology(self, startnodes, endnodes):
-        cell_topology: dict[int, list[int]] = {}
-        for s, e in zip(startnodes, endnodes.ravel()):
-            s, e = int(s), int(e)
-            if s != e:
-                if cell_topology.get(e) is None:
-                    cell_topology[e] = [s]
-                else:
-                    cell_topology[e].append(s)
-        return cell_topology
+        network_ids = np.flatnonzero(mask)
+        return startnodes, endnodes, indegree, network_ids
 
     def extract_river_network(
         self,
@@ -1918,7 +1910,7 @@ class sGrid:
             line_string = shape(line)
             props = {
                 "netnumber": index,
-                "goto": connections[index],
+                "goto": ChainMap(*connections).get(index, 0),
                 "length": round(line_string.length, 1),
             }
             if dem is not None:
@@ -1934,6 +1926,42 @@ class sGrid:
             "properties": {"name": f"EPSG:{fdir.crs.to_epsg()}"},
         }
         return geo
+
+    def get_downstream(self, poi_id, connections_id, lower_list):
+        new_poi_id = connections_id.get(poi_id, -1)
+        if poi_id == -1:
+            return set(lower_list[:-1])
+        else:
+            lower_list.append(poi_id)
+            return self.get_downstream(new_poi_id, connections_id, lower_list)
+
+    def get_upstream(self, poi_id, connections_id):
+        """
+        Trova tutti i bacini a monte di un dato bacino usando la ricorsione.
+
+        Args:
+            target_basin_id (int): L'ID del bacino di cui trovare gli affluenti.
+            connections (dict): Il dizionario {upstream: downstream}.
+
+        Returns:
+            list: Una lista di tutti gli ID dei bacini a monte.
+        """
+
+        upstream_lookup = defaultdict(list)
+        for upstream, downstream in connections_id.items():
+            upstream_lookup[downstream].append(upstream)
+
+        upstream_connection = set()
+
+        def _recursive_search(current_basin_id):
+            direct_upstream_id = upstream_lookup.get(current_basin_id, [])
+            for poi_id in direct_upstream_id:
+                upstream_connection.add(poi_id)
+                _recursive_search(poi_id)
+
+        _recursive_search(poi_id)
+
+        return upstream_connection
 
     def extract_profiles(
         self,
@@ -2004,9 +2032,8 @@ class sGrid:
                     flat_id = r * fdir.shape[1] + c
                     id_split_points.append(int(flat_id))
 
-        startnodes, endnodes, indegree = self.get_cell_topology(fdir, dirmap, mask)
-
-        indegree = np.bincount(endnodes.ravel(), minlength=fdir.size).astype(np.uint8)
+        startnodes, endnodes, indegree, net_ids = self._prepare_topology_inputs(fdir, dirmap, mask)
+        # startnodes è solo l'indice flatten mentre endnodes per riga/colonna
         orig_indegree = np.copy(indegree)
         startnodes = startnodes[(indegree == 0)]
         profiles, connections_id = _self._d8_stream_connection_iter_numba(
@@ -2031,13 +2058,43 @@ class sGrid:
                 mapped_profiles[netnumber] = prof
                 netnumber += 1
 
+        # define outlets ids
+        outlet_ids = []
+        for poi_id in id_split_points:
+            others = set(id_split_points) - {poi_id}
+            up_ls = self.get_downstream(poi_id, connections_id, [])
+            if up_ls.intersection(others):
+                print(f"punto {poi_id} a monte di {up_ls.intersection(others)}")
+            else:
+                outlet_ids.append(poi_id)
+                print(f"punto {poi_id} è un outlet")
+
+        print("Outlet ids",  outlet_ids)
+
+        mapped_profiles = {k: v for k, v in mapped_profiles.items() if v[0] not in outlet_ids}
+
         indices = {
-            profile[0]: netnumber for netnumber, profile in mapped_profiles.items()
+            profile[0]: netnumber
+            for netnumber, profile in mapped_profiles.items()
+            if profile[0] not in outlet_ids
         }
-        connections = {
-            indices[key]: indices.get(value, 0) for key, value in connections_id.items()
-        }
-        return mapped_profiles, connections
+
+        topology_list = []
+        selected_profiles = {}
+        for outlet in outlet_ids:
+            upstream_ids = self.get_upstream(outlet, connections_id)
+            upstream_netnumber = [indices[i] for i in upstream_ids]
+            print(upstream_ids)
+            connections = {
+                indices[key]: indices.get(value, 0) for key, value in connections_id.items() if key in upstream_ids
+            }
+            topology_list.append(connections)
+            selected_profiles = selected_profiles | {k: v for k, v in mapped_profiles.items() if k in upstream_netnumber}
+
+        print(selected_profiles)
+        print("topology list", topology_list)
+
+        return selected_profiles, topology_list
 
     def stream_order(
         self,
@@ -2089,7 +2146,7 @@ class sGrid:
         kwargs.update(mask_overrides)
         mask = self._input_handler(mask, **kwargs)
 
-        startnodes, endnodes, indegree = self.get_cell_topology(fdir, dirmap, mask)
+        startnodes, endnodes, indegree, net_ids = self._prepare_topology_inputs(fdir, dirmap, mask)
 
         orig_indegree = np.copy(indegree)
         startnodes = startnodes[(indegree == 0)]
